@@ -47,7 +47,9 @@ def should_post(prompt, post_count=3):
         return True
     
     message = f"Should we post another photo, dont post more than {post_count} times per day? the current time and date are {datetime.now().strftime('%A, %B %d, %H:%M')}. Answer with just 'yes or 'no'"
-    response = run_gpt(prompt, message)
+    small_prompt = prompt.split('[POST')[0]
+
+    response = run_gpt(small_prompt, message)
     if 'yes' in response.strip().lower():
         return True
     return False
@@ -76,7 +78,9 @@ def get_image(project_name):
 
 def get_caption(prompt, description):
     message = f"create the instagram post from the image description. \ndescription: {description}. Write the caption in the following format. Include nothing but the caption. \nie. CAPTION: [write caption here]"
-    caption = run_gpt(prompt, message)
+    # get all data from the prompt prior to the first post entry
+    small_prompt = prompt.split('[POST')[0]
+    caption = run_gpt(small_prompt, message)
     caption = caption.replace("Caption:", "").replace("CAPTION:", "").replace('"', "").strip()
     prompt = prompt + "\nCAPTION: {}".format(caption)
     return prompt, caption
