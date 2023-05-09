@@ -6,7 +6,7 @@ import random
 import re
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import openai
 from instagrapi import Client
@@ -24,8 +24,28 @@ def load_config(account_dir):
         raise ValueError(f'Could not find an account with the name {account_dir}. please create an account first with initialize_bot.py')
 
 def should_post(prompt, post_count=3):
-    if re.search(r"\[POST [a-z0-9]{19}\]", prompt) is None:
+    print("Deciding whether to post or wait...")
+    minutes_between_posts = (24*60) / post_count
+
+    last_timestamp = re.search(r"(?s:.*)POST TIMESTAMP: (.*)\n", prompt)
+
+    # get last datetime from last timestamp - everything after first comma
+    if last_timestamp is not None:
+        last_time = str(last_timestamp.group(1).split(',')[1]) + str(last_timestamp.group(1).split(',')[2])
+        print("last_time = "+str(last_time))
+
+    # Get current year
+    current_year = datetime.now().strftime('%Y')
+    last_time = str(current_year) + str(last_time)
+
+    time_since_last_post = datetime.now() - datetime.strptime(last_time, '%Y %B %d %H:%M')
+    print("Time Since Last Post: " + str(time_since_last_post))
+    minutes_since_last_post = time_since_last_post.total_seconds() / 60
+    print("Minutes Since Last Post: " + str(minutes_since_last_post))
+
+    if last_timestamp is None or minutes_since_last_post > minutes_between_posts*0.8:
         return True
+    
     message = f"Should we post another photo, dont post more than {post_count} times per day? the current time and date are {datetime.now().strftime('%A, %B %d, %H:%M')}. Answer with just 'yes or 'no'"
     response = run_gpt(prompt, message)
     if 'yes' in response.strip().lower():
@@ -93,7 +113,9 @@ def replace_uuid_with_pk(text, response_pk):
     return text[:last_match.start(1)] + response_pk + text[last_match.end(1):]
 
 def update_metrics(prompt):
+    print("\tGetting post metrics...")
     metrics = get_post_metrics(INSTAGRAM_USERNAME, instagram_client)
+    print("\tPost metrics retrieved! ")
     prompt_lines = prompt.split('\n')
     updated_prompt = []
 
@@ -119,9 +141,11 @@ def update_metrics(prompt):
 
 def main_job(project_name, post_count):
     prompt = open(f"accounts/{project_name}/prompt.txt", "r").read()
+    print("Updating metrics... ")
+    prompt = update_metrics(prompt)
+    print("Metric Update Complete.")
     if should_post(prompt, post_count): # and there are images in the queue
         print(f"Posting - {project_name}")
-        prompt = update_metrics(prompt)
         prompt, post_content, image_path = start_post(prompt, project_name)
 
         try:
@@ -136,7 +160,6 @@ def main_job(project_name, post_count):
             print(e)
     else:
         print(f"Not posting - {project_name}")
-        prompt = update_metrics(prompt)
         with open(f"accounts/{project_name}/prompt.txt", "w") as f:
             f.write(prompt)
 
@@ -154,12 +177,20 @@ if __name__ == "__main__":
     INSTAGRAM_USERNAME = config['username']
     INSTAGRAM_PASSWORD = config['password']
 
+    # print("Instagram Username: "+INSTAGRAM_USERNAME)
+    # print("Instagram Password: "+INSTAGRAM_PASSWORD)
+
     instagram_client = Client()
     time.sleep(5)  # Wait for 5 seconds before logging in to prevent rate limiting
     instagram_client.login(INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD)
 
     project_name = account_dir.rstrip('/')  # Use the account directory as the project_name
 
+    seconds_between_posts = 60 * 60 * 24 / post_count
+
     while True:
         main_job(project_name, post_count)
-        time.sleep(3600)
+        wait_time_seconds = random.randint(round(seconds_between_posts * 0.6), round(seconds_between_posts))
+        print(f'Sleeping for ~{round(wait_time_seconds/60)} minutes - Current time = {str(datetime.now().strftime("%A, %B %d, %H:%M"))}')
+        print(f'\tNext post: {str((datetime.now() + timedelta(seconds=wait_time_seconds)).strftime("%A, %B %d, %H:%M"))}')
+        time.sleep(wait_time_seconds)
