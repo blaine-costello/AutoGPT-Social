@@ -34,25 +34,23 @@ def should_post(prompt, post_count=3):
         last_time = str(last_timestamp.group(1).split(',')[1]) + str(last_timestamp.group(1).split(',')[2])
         print("last_time = "+str(last_time))
 
-    # Get current year
-    current_year = datetime.now().strftime('%Y')
-    last_time = str(current_year) + str(last_time)
+        # Get current year
+        current_year = datetime.now().strftime('%Y')
+        last_time = str(current_year) + str(last_time)
 
-    time_since_last_post = datetime.now() - datetime.strptime(last_time, '%Y %B %d %H:%M')
-    print("Time Since Last Post: " + str(time_since_last_post))
-    minutes_since_last_post = time_since_last_post.total_seconds() / 60
-    print("Minutes Since Last Post: " + str(minutes_since_last_post))
+        time_since_last_post = datetime.now() - datetime.strptime(last_time, '%Y %B %d %H:%M')
+        print("Time Since Last Post: " + str(time_since_last_post))
+        minutes_since_last_post = time_since_last_post.total_seconds() / 60
+        print("Minutes Since Last Post: " + str(minutes_since_last_post))
 
-    if last_timestamp is None or minutes_since_last_post > minutes_between_posts*0.8:
+        if minutes_since_last_post > minutes_between_posts*0.8:
+            return True
+        else:
+            return False
+        
+    else:
         return True
-    
-    message = f"Should we post another photo, dont post more than {post_count} times per day? the current time and date are {datetime.now().strftime('%A, %B %d, %H:%M')}. Answer with just 'yes or 'no'"
-    small_prompt = prompt.split('[POST')[0]
 
-    response = run_gpt(small_prompt, message)
-    if 'yes' in response.strip().lower():
-        return True
-    return False
 
 def start_post(prompt, project_name):
     id = uuid.uuid4().hex
@@ -193,8 +191,16 @@ if __name__ == "__main__":
     seconds_between_posts = 60 * 60 * 24 / post_count
 
     while True:
-        main_job(project_name, post_count)
-        wait_time_seconds = random.randint(round(seconds_between_posts * 0.6), round(seconds_between_posts))
+        try:
+            main_job(project_name, post_count)
+            wait_time_seconds = random.randint(round(seconds_between_posts * 0.6), round(seconds_between_posts))
+            print(f'~~ Main Job Successful! ~~')
+        except Exception as e:
+            print(f'Error in main_job(..) - Exception caught: {e}')
+            print(f'## Main Job Failed... ##')
+        
         print(f'Sleeping for ~{round(wait_time_seconds/60)} minutes - Current time = {str(datetime.now().strftime("%A, %B %d, %H:%M"))}')
+        
         print(f'\tNext post: {str((datetime.now() + timedelta(seconds=wait_time_seconds)).strftime("%A, %B %d, %H:%M"))}')
+  
         time.sleep(wait_time_seconds)
